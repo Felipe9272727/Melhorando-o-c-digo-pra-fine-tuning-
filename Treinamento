@@ -1,0 +1,70 @@
+import sys
+import gc
+import torch
+import warnings
+
+# --- 1. Robust Monkeypatching (Safety Net) ---
+# Prevents RuntimeError if bitsandbytes is touched/reloaded
+def robust_patch_torch_library():
+    if hasattr(torch.library, 'define'):
+        original_define = torch.library.define
+        def patched_define(qualname, schema, *args, **kwargs):
+            try:
+                return original_define(qualname, schema, *args, **kwargs)
+            except RuntimeError as e:
+                if "Duplicate registration" in str(e) and "bitsandbytes" in qualname:
+                    return
+                raise e
+        torch.library.define = patched_define
+
+    if hasattr(torch.library, 'impl'):
+        original_impl = torch.library.impl
+        def patched_impl(lib, name, dispatch_key, *args, **kwargs):
+            try:
+                return original_impl(lib, name, dispatch_key, *args, **kwargs)
+            except RuntimeError as e:
+                if "already a kernel registered" in str(e) and "bitsandbytes" in name:
+                    return
+                raise e
+        torch.library.impl = patched_impl
+
+    try:
+        # Patching Library class methods directly if possible
+        original_lib_impl = torch.library.Library.impl
+        def patched_lib_impl(self, op_name, fn, dispatch_key='', *args, **kwargs):
+            try:
+                return original_lib_impl(self, op_name, fn, dispatch_key, *args, **kwargs)
+            except RuntimeError as e:
+                if "already a kernel registered" in str(e) and "bitsandbytes" in str(e):
+                    return
+                raise e
+        torch.library.Library.impl = patched_lib_impl
+    except AttributeError:
+        pass
+
+robust_patch_torch_library()
+print("Applied PyTorch patches.")
+
+# --- 2. Nuclear Memory Cleanup ---
+print("Starting Nuclear Memory Cleanup...")
+
+# Clear libraries from sys.modules
+libs_to_clear = ['transformers', 'peft', 'trl', 'accelerate'] # Exclude bitsandbytes
+for lib in libs_to_clear:
+    keys = [k for k in sys.modules.keys() if k.startswith(lib)]
+    for k in keys:
+        del sys.modules[k]
+print(f"Cleared modules: {libs_to_clear}")
+
+# Delete global variables
+globals_to_clear = ['model', 'trainer', 'tokenizer', 'dataset', 'processed_dataset', 'tokenized_dataset']
+for var in globals_to_clear:
+    if var in globals():
+        del globals()[var]
+        print(f"Deleted global: {var}")
+
+# Memory Cleanup
+gc.collect()
+torch.cuda.empty_cache()
+print(f"CUDA Allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+print("System reset complete.")
