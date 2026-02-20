@@ -1,0 +1,12 @@
+# .coderabbit.yaml
+language: "pt-BR" # Força ele a responder em português
+reviews:
+  profile: "chill" # Desativa o modo pedante para erros minúsculos
+  request_changes_workflow: false # Evita que ele bloqueie seu PR por bobagem
+  high_level_summary: true
+  custom_instructions: |
+    Você é um engenheiro de software sênior focado em arquitetura e lógica.
+    - REQUISITO CRÍTICO: Ignore completamente problemas de formatação, linting, estilo de código ou tipagem básica. O linter da equipe já faz isso.
+    - NÃO aponte erros óbvios.
+    - Foque EXCLUSIVAMENTE em: gargalos de performance, falhas de segurança, problemas de concorrência e falhas na lógica de negócios.
+    - Se a descrição do Pull Request pedir para focar em algo específico, obedeça a essa instrução acima de qualquer outra regra.
