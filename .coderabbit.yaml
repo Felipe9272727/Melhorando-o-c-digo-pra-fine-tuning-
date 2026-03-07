@@ -1,12 +1,155 @@
-# .coderabbit.yaml
-language: "pt-BR" # Força ele a responder em português
+# ============================================================
+# .coderabbit.yaml — Review Config para Pipeline de Treino
+# Qwen2.5-Coder-7B via Unsloth + GRPO + CURE
+# Hardware alvo: Google Colab Pro+ A100 80GB
+# ============================================================
+
+language: "pt-BR"
+
+early_access: true
+
 reviews:
-  profile: "chill" # Desativa o modo pedante para erros minúsculos
-  request_changes_workflow: false # Evita que ele bloqueie seu PR por bobagem
+  profile: "assertive"        # Review agressivo, sem poupar críticas
+  request_changes_workflow: true
   high_level_summary: true
-  custom_instructions: |
-    Você é um engenheiro de software sênior focado em arquitetura e lógica.
-    - REQUISITO CRÍTICO: Ignore completamente problemas de formatação, linting, estilo de código ou tipagem básica. O linter da equipe já faz isso.
-    - NÃO aponte erros óbvios.
-    - Foque EXCLUSIVAMENTE em: gargalos de performance, falhas de segurança, problemas de concorrência e falhas na lógica de negócios.
-    - Se a descrição do Pull Request pedir para focar em algo específico, obedeça a essa instrução acima de qualquer outra regra.
+  high_level_summary_placeholder: "@coderabbitai summary"
+  auto_title_placeholder: "@coderabbitai"
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  sequence_diagrams: true       # Diagramas do fluxo SFT → GRPO → Save
+
+  # ── Instruções Globais para o Reviewer ──
+  path_instructions:
+    - path: "**/*.py"
+      instructions: |
+        Este arquivo faz parte de um pipeline de fine-tuning de LLM para
+        especialização em computação gráfica (WebGL, Three.js, Canvas API,
+        GLSL shaders, lógica de jogos Python/JS).
+
+        CONTEXTO DO HARDWARE:
+        - Google Colab Pro+ com NVIDIA A100 80GB VRAM
+        - O código atual foi projetado para A100 40GB
+        - Temos o DOBRO da VRAM disponível — identifique TODAS as oportunidades
+          de usar essa VRAM extra para melhorar a qualidade do modelo
+
+        OBJETIVO ÚNICO: Maximizar a inteligência do modelo treinado.
+        Não estamos otimizando para velocidade ou custo — queremos o modelo
+        mais capaz possível dentro do hardware disponível.
+
+        REVISE CRITICAMENTE:
+
+        1. HIPERPARÂMETROS DE TREINAMENTO
+           - batch_size, gradient_accumulation, learning_rate
+           - Número de steps (SFT e GRPO)
+           - Warmup ratio e scheduler
+           - Peso de cada reward function
+           - max_seq_length (podemos aumentar com 80GB?)
+           - LoRA rank (64 é suficiente? Podemos ir a 128?)
+           - lora_alpha ratio em relação ao rank
+           - num_generations no GRPO (8 é pouco para 80GB?)
+
+        2. FUNÇÕES DE RECOMPENSA (REWARD FUNCTIONS)
+           - As 5 funções atuais cobrem todos os aspectos da pesquisa?
+           - Os pesos/scores máximos estão balanceados?
+           - Faltam verificações de qualidade de código?
+           - A reward de compilação realmente compila o código?
+           - A spatial_reward é muito superficial (só regex)?
+           - Podemos adicionar execução real de código Python?
+           - O CURE reward verifica coerência real ou só conta linhas?
+           - Falta reward de diversidade/entropia nas gerações?
+           - Falta reward de concisão (penalizar código desnecessário)?
+
+        3. PIPELINE DE DADOS
+           - O dataset está sendo usado de forma ótima?
+           - Falta data augmentation?
+           - O system_prompt do SFT é bom o suficiente?
+           - O formato <reasoning>/<answer>/<tests> é ótimo?
+           - Devemos adicionar mais tags (ex: <plan>, <complexity>)?
+
+        4. ARQUITETURA DO MODELO
+           - gpu_memory_utilization=0.6 é desperdiçar 40% da GPU
+           - Com 80GB, podemos carregar em 8-bit em vez de 4-bit?
+           - Podemos usar rank 128 ou 256 no LoRA?
+           - Target modules estão completos? Falta embed/lm_head?
+           - gradient_checkpointing está otimizado?
+
+        5. GRPO ESPECÍFICO
+           - O num_generations=8 é baixo demais?
+           - O cálculo de vantagem (advantage) está implícito no TRL
+             mas os pesos das rewards estão balanceados?
+           - max_completion_length é suficiente para código Three.js?
+           - Falta KL penalty ou está implícito?
+           - O effective batch size (1×8=8) é muito pequeno?
+
+        6. FRAMEWORK CURE
+           - A implementação atual do CURE é muito simplificada
+           - Não há co-evolução real (coder vs tester)
+           - Podemos implementar self-play?
+           - Os testes gerados são realmente executados?
+
+        7. ROBUSTEZ E CONFIABILIDADE
+           - Há tratamento de OOM (Out of Memory)?
+           - O auto-resume funciona corretamente?
+           - Os checkpoints são validados antes de carregar?
+           - Falta logging de métricas de reward por função?
+           - Falta early stopping baseado em reward plateau?
+
+        8. SALVAMENTO E DEPLOY
+           - O merge 16-bit é a melhor opção?
+           - GGUF Q8_0 vs Q5_K_M — qual é melhor para este caso?
+           - Falta push para Hugging Face Hub?
+           - Falta card do modelo com métricas?
+
+    - path: "**/*.ipynb"
+      instructions: |
+        Notebook Colab para treino de LLM.
+        Mesmas instruções dos arquivos .py acima.
+        Adicionalmente, verifique:
+        - Células estão na ordem correta?
+        - Há células de validação/teste entre as etapas?
+        - Faltam células de monitoramento de VRAM em tempo real?
+        - O notebook é idempotente (pode rodar múltiplas vezes)?
+
+    - path: "**/*.json"
+      instructions: |
+        Arquivo de configuração ou dataset.
+        Verifique:
+        - Formato está correto para o tokenizer Qwen2.5?
+        - Chat template está no formato esperado?
+        - Há exemplos com campos vazios ou nulos?
+
+    - path: "**/requirements*.txt"
+      instructions: |
+        Verifique compatibilidade de versões:
+        - unsloth >= 2025.6
+        - trl >= 0.12
+        - vllm compatível com unsloth
+        - torch >= 2.4 para A100
+
+  # ── Ferramentas de Análise ──
+  tools:
+    ruff:
+      enabled: true
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+
+# ── Chat Settings ──
+chat:
+  auto_reply: true
+
+# ── Configurações de Knowledge Base ──
+knowledge_base:
+  opt_out: false
+  learnings:
+    scope: "auto"
+  issues:
+    scope: "auto"
+  jira:
+    project_keys: []
+  linear:
+    team_keys: []
+  pull_requests:
+    scope: "auto"
