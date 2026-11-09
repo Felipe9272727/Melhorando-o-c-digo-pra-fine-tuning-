@@ -24,13 +24,13 @@ def normalize(row):
     answer = clean(row.get("output") or row.get("answer") or row.get("response"))
     if context:
         prompt += "\nContexto: " + context
-    if not (8 <= len(prompt.encode()) <= 1000 and 12 <= len(answer.encode()) <= 5000):
+    if not (4 <= len(prompt.encode()) <= 1000 and 8 <= len(answer.encode()) <= 5000):
         return None
     if EMAIL.search(prompt + " " + answer) or URL.search(prompt + " " + answer):
         return None
     if "\ufffd" in (prompt + answer) or REPEAT.search(answer):
         return None
-    if sum(c.isalpha() for c in answer) < 8:
+    if sum(c.isalpha() for c in answer) < 5:
         return None
     return {"question": prompt, "answer": answer}
 
